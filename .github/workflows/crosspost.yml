@@ -1,0 +1,58 @@
+name: X → Instagram 転載
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # 5分ごと（GitHubの混雑で数分〜十数分遅れることがあります）
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "テスト実行（Instagramには投稿しない）"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crosspost
+  cancel-in-progress: false
+
+jobs:
+  crosspost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Git の設定
+        run: |
+          git config user.name  "x2ig-bot"
+          git config user.email "x2ig-bot@users.noreply.github.com"
+
+      - name: 転載を実行
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+        run: python bot.py
+
+      - name: 状態を保存
+        if: always()
+        run: |
+          git add state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update state"
+            git pull --rebase
+            git push
+          fi
