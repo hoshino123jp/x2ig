@@ -237,10 +237,34 @@ def resolve_image_urls(tweet_id: str, items: list[dict], config: dict, dry_run: 
 # ---------------------------------------------------------------- Instagram
 
 class Instagram:
-    def __init__(self, user_id: str, token: str, version: str = "v23.0"):
+    HOSTS = {
+        # 2026年10月以降の新しいMetaアプリ（統合ログイン・期限なしのシステムユーザートークン）
+        "facebook": "https://graph.facebook.com",
+        # 以前の「Instagramログイン」方式（60日トークン）
+        "instagram": "https://graph.instagram.com",
+    }
+
+    def __init__(self, user_id: str, token: str, version: str = "v23.0", host: str = "auto"):
         self.user_id = user_id
         self.token = token
-        self.base = f"https://graph.instagram.com/{version}"
+        self.version = version
+        if host == "auto":
+            host = self.detect_host()
+        self.base = f"{self.HOSTS[host]}/{version}"
+        log(f"Instagram API: {self.base}")
+
+    def detect_host(self) -> str:
+        """トークンの種類に合わせて、使うAPIのアドレスを自動で選ぶ。"""
+        for name in ("facebook", "instagram"):
+            try:
+                r = requests.get(f"{self.HOSTS[name]}/{self.version}/{self.user_id}",
+                                 params={"fields": "id,username", "access_token": self.token},
+                                 timeout=HTTP_TIMEOUT)
+                if r.status_code == 200:
+                    return name
+            except requests.RequestException:
+                pass
+        raise RuntimeError("Instagramのトークンが使えません。IG_ACCESS_TOKEN と IG_USER_ID を確認してください。")
 
     def _post(self, path: str, data: dict) -> dict:
         r = requests.post(f"{self.base}{path}", data={**data, "access_token": self.token}, timeout=HTTP_TIMEOUT)
@@ -331,7 +355,7 @@ def run(now: datetime | None = None) -> int:
     ig = None
     if not dry_run and not paused:
         ig = Instagram(os.environ["IG_USER_ID"], os.environ["IG_ACCESS_TOKEN"],
-                       config.get("graph_api_version", "v23.0"))
+                       config.get("graph_api_version", "v23.0"), config.get("graph_api_host", "auto"))
 
     posted = state.setdefault("posted", {})
     attempts = state.setdefault("attempts", {})
