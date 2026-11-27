@@ -1,4 +1,4 @@
-name: Instagram トークン更新
+name: 定期実行の維持
 
 on:
   schedule:
@@ -9,27 +9,13 @@ permissions:
   contents: write
 
 jobs:
-  refresh:
+  keepalive:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - run: pip install requests
-
-      - name: トークンを更新して Secrets に保存
-        env:
-          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          NEW_TOKEN="$(python refresh_token.py)"
-          echo "::add-mask::$NEW_TOKEN"
-          gh secret set IG_ACCESS_TOKEN --body "$NEW_TOKEN" --repo "$GITHUB_REPOSITORY"
-
       # 60日間コミットがないとGitHubが定期実行を止めるため、週1回だけ記録を残す
+      # ※Instagramのトークン（60日）は、期限前にMeta Business Suiteで手動で作り直してください
       - name: 定期実行の維持
         run: |
           git config user.name  "x2ig-bot"
